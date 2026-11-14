@@ -1,0 +1,7 @@
+# Only what the benchmark adds on top of the SGLang image (it already has sglang, torch, transformers).
+requests
+matplotlib
+pandas
+pyarrow
+peft
+accelerate

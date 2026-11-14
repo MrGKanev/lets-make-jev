@@ -1,0 +1,26 @@
+# Layout follows MrGKanev/TensorFlow-GPU-Docker-Setup (GPU reservation, repo mounted at /app, cache volumes).
+services:
+  jev:
+    build: .
+    ipc: host                      # SGLang shares tensors between processes
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"                # live demo: python3 -m ui.serve
+    volumes:
+      - ./:/app
+      - hf-cache:/root/.cache/huggingface   # models are downloaded once
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - MODELS=${MODELS:-Qwen/Qwen2.5-0.5B-Instruct Qwen/Qwen3-4B-Instruct-2507}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - SKIP_TRAIN=${SKIP_TRAIN:-0}
+      - JEV_MODE=${JEV_MODE:-full}
+
+volumes:
+  hf-cache:

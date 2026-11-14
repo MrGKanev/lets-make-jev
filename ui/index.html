@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Jev: score vs generate</title>
+<style>
+  body{font:15px system-ui,sans-serif;margin:0;color:#0f172a;background:#f8fafc}
+  header{padding:16px 24px;display:flex;gap:16px;align-items:center}
+  button{font:inherit;padding:8px 18px;border:0;border-radius:6px;background:#0f172a;color:#fff;cursor:pointer}
+  main{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:0 24px 24px}
+  section{background:#fff;border-radius:8px;padding:16px;border-top:4px solid var(--c)}
+  #score{--c:#0f766e} #gen{--c:#c2410c}
+  h2{margin:0 0 8px;color:var(--c)}
+  .stats{display:flex;gap:20px;margin-bottom:12px}
+  .stats b{display:block;font-size:26px}
+  .row{border-top:1px solid #e2e8f0;padding:8px 0;font-size:13px}
+  .row .t{color:#475569;margin-bottom:2px}
+  .ok{color:#15803d}.bad{color:#b91c1c}
+  .bar{display:inline-block;height:8px;background:#0f766e;border-radius:2px;vertical-align:middle}
+  .chip{font-size:11px;padding:1px 6px;border-radius:9px;background:#e2e8f0}
+</style>
+<header><button id="go">Run both lanes</button><span id="info"></span></header>
+<main>
+  <section id="score"><h2>Score (one forward pass)</h2><div class="stats">
+    <div><b data-k="done">0</b>done</div><div><b data-k="acc">–</b>correct</div>
+    <div><b data-k="p50">–</b>median ms</div><div><b data-k="time">0.0</b>elapsed s</div></div><div class="list"></div></section>
+  <section id="gen"><h2>Generate (decode, then parse)</h2><div class="stats">
+    <div><b data-k="done">0</b>done</div><div><b data-k="acc">–</b>correct</div>
+    <div><b data-k="p50">–</b>median ms</div><div><b data-k="time">0.0</b>elapsed s</div></div><div class="list"></div></section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+async function lane(id, path, cases) {
+  const root = $("#" + id), set = (k, v) => root.querySelector(`[data-k=${k}]`).textContent = v;
+  const t0 = performance.now(), lat = []; let ok = 0;
+  const tick = setInterval(() => set("time", ((performance.now() - t0) / 1000).toFixed(1)), 100);
+  for (let i = 0; i < cases.length; i++) {
+    const r = await (await fetch(path, {method: "POST", body: JSON.stringify({i})})).json();
+    lat.push(r.ms); ok += r.ok;
+    set("done", i + 1); set("acc", `${ok}/${i + 1}`); set("p50", Math.round(median(lat)));
+    const bars = r.probs ? Object.entries(r.probs).map(([k, p]) =>
+      `${k} <span class="bar" style="width:${Math.round(p * 80)}px"></span> ${p.toFixed(2)}`).join(" · ") : esc(r.text);
+    root.querySelector(".list").insertAdjacentHTML("afterbegin",
+      `<div class="row"><div class="t">${esc(cases[i].text)}</div>
+       <span class="${r.ok ? "ok" : "bad"}">${r.choice} ${r.ok ? "✓" : "✗ (expected " + cases[i].label + ")"}</span>
+       <span class="chip">${Math.round(r.ms)} ms</span>${r.route ? ` <span class="chip">${r.route}</span>` : ""}${r.calibrated ? ` <span class="chip">calibrated</span>` : ""}${(r.review_reasons || []).map(reason => ` <span class="chip">${esc(reason)}</span>`).join("")}<div class="t">${bars}</div></div>`);
+  }
+  clearInterval(tick); set("time", ((performance.now() - t0) / 1000).toFixed(1));
+}
+
+$("#go").onclick = async () => {
+  const cases = await (await fetch("/cases")).json();
+  $("#info").textContent = `${cases.length} messages, both lanes start together`;
+  document.querySelectorAll(".list").forEach(e => e.innerHTML = "");
+  await Promise.all([lane("score", "/score", cases), lane("gen", "/generate", cases)]);
+};
+</script>
